@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle } from 'lucide-react';
 
-// 📌 Định nghĩa kiểu dữ liệu chuẩn (Thay thế hoàn toàn cho 'any')
 interface RequestItem {
   id: string;
   title: string;
@@ -36,12 +35,10 @@ export default function IntelligentBPMApp() {
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // State cho Form tạo đơn
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  // 1. Tải dữ liệu ban đầu từ Supabase (Chuẩn Async Effect, tránh cascading renders)
   useEffect(() => {
     let isMounted = true;
 
@@ -70,7 +67,6 @@ export default function IntelligentBPMApp() {
     };
   }, []);
 
-  // 2. Hàm cập nhật lại danh sách dữ liệu sau khi tương tác
   const refreshData = async () => {
     const { data: reqData } = await supabase
       .from('requests')
@@ -87,7 +83,6 @@ export default function IntelligentBPMApp() {
     if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
 
-  // 3. Hàm gửi đơn đề xuất mua sắm / chi tiêu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !amount) return alert('Vui lòng nhập đầy đủ thông tin!');
@@ -95,7 +90,6 @@ export default function IntelligentBPMApp() {
     setLoading(true);
 
     try {
-      // 3a. Tạo bản ghi mới vào Supabase
       const { data, error } = await supabase
         .from('requests')
         .insert([
@@ -111,7 +105,6 @@ export default function IntelligentBPMApp() {
 
       if (error) throw error;
 
-      // 3b. Gọi Custom Extension Backend API (xử lý AI & Audit Log)
       await fetch('/api/process-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -123,7 +116,6 @@ export default function IntelligentBPMApp() {
         }),
       });
 
-      // Reset form & cập nhật lại danh sách
       setTitle('');
       setAmount('');
       setDescription('');
@@ -137,11 +129,9 @@ export default function IntelligentBPMApp() {
     }
   };
 
-  // 4. Hàm Phê duyệt / Từ chối đơn (Quản lý)
   const handleUpdateStatus = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
     await supabase.from('requests').update({ status: newStatus }).eq('id', id);
 
-    // Ghi audit log cho hành động của quản lý
     await supabase.from('audit_logs').insert({
       request_id: id,
       action: `MANAGER_${newStatus}`,
@@ -152,18 +142,18 @@ export default function IntelligentBPMApp() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen bg-slate-100 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
         
         {/* HEADER */}
-        <header className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+        <header className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
               <Bot className="text-blue-600" /> Hệ Thống Phê Duyệt Chi Tiêu Thông Minh (Hybrid BPM)
             </h1>
-            <p className="text-slate-500 text-sm mt-1">Lương Vĩ Thông - Đề thi số 2</p>
+            <p className="text-slate-600 text-sm mt-1 font-medium">Lương Vĩ Thông - Đề thi số 2</p>
           </div>
-          <span className="bg-green-100 text-green-700 font-medium px-3 py-1 rounded-full text-xs">
+          <span className="bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full text-xs">
             System Online
           </span>
         </header>
@@ -171,39 +161,39 @@ export default function IntelligentBPMApp() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* CỘT 1: FORM TẠO ĐƠN YÊU CẦU */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-              <PlusCircle className="text-blue-500" /> Tạo Đề Xuất Chi Tiêu
+          <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <PlusCircle className="text-blue-600" /> Tạo Đề Xuất Chi Tiêu
             </h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tiêu đề yêu cầu</label>
+                <label className="block text-sm font-bold text-slate-800 mb-1">Tiêu đề yêu cầu</label>
                 <input
                   type="text"
                   placeholder="Ví dụ: Mua bàn ghế văn phòng"
-                  className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 focus:ring-0 outline-none placeholder:text-slate-400"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Số tiền (VNĐ)</label>
+                <label className="block text-sm font-bold text-slate-800 mb-1">Số tiền (VNĐ)</label>
                 <input
                   type="number"
                   placeholder="5000000"
-                  className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 focus:ring-0 outline-none placeholder:text-slate-400"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mô tả chi tiết</label>
+                <label className="block text-sm font-bold text-slate-800 mb-1">Mô tả chi tiết</label>
                 <textarea
                   rows={3}
                   placeholder="Mô tả mục đích sử dụng..."
-                  className="w-full border p-2 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 focus:ring-0 outline-none placeholder:text-slate-400"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
@@ -212,7 +202,7 @@ export default function IntelligentBPMApp() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-blue-600 text-white font-medium py-2 rounded-lg text-sm hover:bg-blue-700 transition"
+                className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm hover:bg-blue-700 active:bg-blue-800 transition shadow-sm"
               >
                 {loading ? 'AI Đang Phân Tích...' : 'Gửi Phê Duyệt'}
               </button>
@@ -221,65 +211,63 @@ export default function IntelligentBPMApp() {
 
           {/* CỘT 2 & 3: REALTIME DASHBOARD BAN QUẢN LÝ */}
           <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <FileText className="text-indigo-500" /> Danh Sách Yêu Cầu Đang Chờ Phê Duyệt
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <FileText className="text-indigo-600" /> Danh Sách Yêu Cầu Đang Chờ Phê Duyệt
               </h2>
 
               <div className="space-y-4">
-                {requests.length === 0 && <p className="text-slate-400 text-sm">Chưa có yêu cầu nào.</p>}
+                {requests.length === 0 && <p className="text-slate-500 font-medium text-sm">Chưa có yêu cầu nào.</p>}
 
                 {requests.map((req) => (
-                  <div key={req.id} className="border p-4 rounded-xl bg-slate-50 space-y-3">
+                  <div key={req.id} className="border-2 border-slate-200 p-4 rounded-xl bg-slate-50 space-y-3">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h3 className="font-bold text-slate-800">{req.title}</h3>
-                        <p className="text-slate-600 text-sm font-semibold mt-0.5">
+                        <h3 className="font-bold text-slate-900 text-base">{req.title}</h3>
+                        <p className="text-blue-700 text-sm font-extrabold mt-0.5">
                           {Number(req.amount).toLocaleString('vi-VN')} VNĐ
                         </p>
                       </div>
                       <span
-                        className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                        className={`text-xs font-bold px-3 py-1 rounded-full ${
                           req.status === 'APPROVED'
-                            ? 'bg-green-100 text-green-700'
+                            ? 'bg-green-100 text-green-800 border border-green-300'
                             : req.status === 'REJECTED'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-yellow-100 text-yellow-700'
+                            ? 'bg-red-100 text-red-800 border border-red-300'
+                            : 'bg-amber-100 text-amber-800 border border-amber-300'
                         }`}
                       >
                         {req.status}
                       </span>
                     </div>
 
-                    {/* THÔNG TIN AI PHÂN TÍCH */}
                     {req.ai_summary && (
                       <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs space-y-1">
-                        <div className="flex items-center gap-1 font-semibold text-blue-800">
+                        <div className="flex items-center gap-1 font-bold text-blue-900">
                           <Bot size={14} /> AI Analysis:
                         </div>
-                        <p className="text-slate-700"><b>Phân loại:</b> {req.category}</p>
-                        <p className="text-slate-700"><b>Tóm tắt:</b> {req.ai_summary}</p>
-                        <p className="text-slate-700">
+                        <p className="text-slate-800"><b>Phân loại:</b> {req.category}</p>
+                        <p className="text-slate-800"><b>Tóm tắt:</b> {req.ai_summary}</p>
+                        <p className="text-slate-800">
                           <b>Đánh giá rủi ro:</b>{' '}
-                          <span className={req.risk_score === 'HIGH' ? 'text-red-600 font-bold' : 'text-green-600 font-bold'}>
+                          <span className={req.risk_score === 'HIGH' ? 'text-red-700 font-black' : 'text-emerald-700 font-black'}>
                             {req.risk_score}
                           </span>
                         </p>
                       </div>
                     )}
 
-                    {/* THAO TÁC NÚT BẤM CỦA QUẢN LÝ */}
                     {req.status === 'PENDING' && (
                       <div className="flex gap-2 justify-end pt-2">
                         <button
                           onClick={() => handleUpdateStatus(req.id, 'APPROVED')}
-                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 transition"
+                          className="flex items-center gap-1 bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-emerald-700 transition"
                         >
                           <CheckCircle size={14} /> Phê Duyệt
                         </button>
                         <button
                           onClick={() => handleUpdateStatus(req.id, 'REJECTED')}
-                          className="flex items-center gap-1 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-red-700 transition"
+                          className="flex items-center gap-1 bg-rose-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-rose-700 transition"
                         >
                           <XCircle size={14} /> Từ Chối
                         </button>
@@ -291,15 +279,15 @@ export default function IntelligentBPMApp() {
             </div>
 
             {/* AUDIT LOG ENGINE DISPLAY */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="text-md font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                <ShieldCheck className="text-emerald-500" /> System Audit Logs (Nhật ký minh bạch)
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+              <h2 className="text-md font-bold text-slate-900 mb-3 flex items-center gap-2">
+                <ShieldCheck className="text-emerald-600" /> System Audit Logs (Nhật ký minh bạch)
               </h2>
-              <div className="bg-slate-900 text-slate-200 p-4 rounded-lg font-mono text-xs max-h-40 overflow-y-auto space-y-1">
+              <div className="bg-slate-950 text-slate-100 p-4 rounded-lg font-mono text-xs max-h-44 overflow-y-auto space-y-1.5 border border-slate-800">
                 {auditLogs.map((log) => (
                   <div key={log.id} className="border-b border-slate-800 pb-1">
-                    <span className="text-slate-500">[{new Date(log.created_at).toLocaleTimeString()}]</span>{' '}
-                    <span className="text-green-400">{log.action}</span> - Details:{' '}
+                    <span className="text-slate-400">[{new Date(log.created_at).toLocaleTimeString()}]</span>{' '}
+                    <span className="text-emerald-400 font-bold">{log.action}</span> - Details:{' '}
                     {JSON.stringify(log.details)}
                   </div>
                 ))}
