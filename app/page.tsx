@@ -27,6 +27,8 @@ interface AuditLogItem {
   performed_by: string | null;
   details: Record<string, unknown> | null;
   created_at: string;
+  // Bổ sung thông tin join
+  requests?: { title: string; amount: number } | null;
 }
 
 const getCleanSupabaseUrl = (rawUrl?: string) => {
@@ -39,7 +41,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
-// Hàm helper sinh dữ liệu AI nếu đơn cũ chưa có dữ liệu trong DB
 const getAIData = (item: RequestItem) => {
   const category = item.category || (Number(item.amount) > 10000000 ? 'Thiết bị & Công nghệ IT' : 'Hành chính & Thiết bị văn phòng');
   const ai_summary = item.ai_summary || `Yêu cầu mua sắm '${item.title}' với ngân sách ${Number(item.amount).toLocaleString('vi-VN')} VNĐ phục vụ vận hành.`;
@@ -116,11 +117,12 @@ export default function IntelligentBPMApp() {
 
       const { data: reqData } = await query;
 
+      // Join với requests để lấy tên tiêu đề đơn trong Audit Log
       const { data: logData } = await supabase
         .from('audit_logs')
-        .select('*')
+        .select('*, requests(title, amount)')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
       if (isMounted) {
         if (reqData) setRequests(reqData as RequestItem[]);
@@ -144,9 +146,9 @@ export default function IntelligentBPMApp() {
 
     const { data: logData } = await supabase
       .from('audit_logs')
-      .select('*')
+      .select('*, requests(title, amount)')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(30);
 
     if (reqData) setRequests(reqData as RequestItem[]);
     if (logData) setAuditLogs(logData as AuditLogItem[]);
@@ -228,6 +230,14 @@ export default function IntelligentBPMApp() {
 
       if (error) throw error;
 
+      // Ghi audit log tạo đơn kèm thông tin User
+      await supabase.from('audit_logs').insert({
+        request_id: data.id,
+        action: 'REQUEST_CREATED',
+        performed_by: user?.id,
+        details: { title: data.title, amount: data.amount, user_email: user?.email },
+      });
+
       await fetch('/api/process-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -259,7 +269,7 @@ export default function IntelligentBPMApp() {
       request_id: id,
       action: `MANAGER_${newStatus}`,
       performed_by: user?.id,
-      details: { updated_at: new Date().toISOString() },
+      details: { updated_at: new Date().toISOString(), manager_email: user?.email },
     });
     await refreshData();
   };
@@ -498,10 +508,7 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* 3 CỘT DANH SÁCH TÍCH HỢP KHUNG AI INSIGHT THÔNG MINH */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-              
-              {/* CỘT ĐÃ DUYỆT */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-emerald-200 space-y-4">
                 <h3 className="text-sm font-bold text-emerald-800 flex items-center justify-between border-b border-emerald-100 pb-2">
                   <span className="flex items-center gap-1.5"><CheckCircle size={16} /> Đã Duyệt Chi</span>
@@ -536,7 +543,6 @@ export default function IntelligentBPMApp() {
                 </div>
               </div>
 
-              {/* CỘT CHỜ DUYỆT */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-amber-200 space-y-4">
                 <h3 className="text-sm font-bold text-amber-800 flex items-center justify-between border-b border-amber-100 pb-2">
                   <span className="flex items-center gap-1.5"><Clock size={16} /> Đang Chờ Duyệt</span>
@@ -577,7 +583,6 @@ export default function IntelligentBPMApp() {
                 </div>
               </div>
 
-              {/* CỘT TỪ CHỐI */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-rose-200 space-y-4">
                 <h3 className="text-sm font-bold text-rose-800 flex items-center justify-between border-b border-rose-100 pb-2">
                   <span className="flex items-center gap-1.5"><XCircle size={16} /> Đã Từ Chối</span>
@@ -704,7 +709,6 @@ export default function IntelligentBPMApp() {
                         </span>
                       </div>
 
-                      {/* HIỂN THỊ KHUNG AI INSIGHT NỔI BẬT */}
                       <div className="bg-purple-50 border border-purple-200 p-3 rounded-lg text-xs space-y-1">
                         <div className="flex items-center gap-1 font-bold text-purple-900">
                           <Sparkles size={14} className="text-purple-600" /> AI Gemini Insight:
@@ -751,29 +755,76 @@ export default function IntelligentBPMApp() {
           </div>
         )}
 
-        {/* TAB 3: SYSTEM AUDIT LOG */}
+        {/* 📊 TAB 3: SYSTEM AUDIT LOG DẠNG BẢNG CHUYÊN NGHIỆP */}
         {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div>
               <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="text-emerald-600" /> System Audit Logs (Nhật Ký Kiểm Toán Minh Bạch)
               </h2>
-              <p className="text-slate-500 text-xs mt-1">Truy vết toàn bộ lịch sử thao tác của nhân viên, AI và cấp quản lý</p>
+              <p className="text-slate-500 text-xs mt-1">Lịch sử truy vết hành động của Nhân viên, Hệ thống AI và Quản lý</p>
             </div>
 
-            <div className="bg-slate-950 text-slate-100 p-5 rounded-xl font-mono text-xs max-h-[550px] overflow-y-auto space-y-2 border border-slate-800 shadow-inner">
-              {auditLogs.map((log) => (
-                <div key={log.id} className="border-b border-slate-800 pb-2 flex items-start gap-3">
-                  <span className="text-slate-500 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span>
-                  <div>
-                    <span className="text-emerald-400 font-bold uppercase">{log.action}</span>
-                    <span className="text-slate-400 ml-2">Details: {JSON.stringify(log.details)}</span>
-                  </div>
-                </div>
-              ))}
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs text-slate-700">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-800 uppercase text-[11px] font-black">
+                  <tr>
+                    <th className="p-3.5">Thời Gian</th>
+                    <th className="p-3.5">Hành Động</th>
+                    <th className="p-3.5">Người Thực Hiện</th>
+                    <th className="p-3.5">Tên Đề Xuất</th>
+                    <th className="p-3.5">Chi Tiết Thao Tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {auditLogs.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-slate-400 italic">Chưa có nhật ký kiểm toán nào.</td>
+                    </tr>
+                  )}
+                  {auditLogs.map((log) => {
+                    const actionDetails = log.details || {};
+                    const performedEmail = 
+                      (actionDetails.user_email as string) || 
+                      (actionDetails.manager_email as string) || 
+                      (log.performed_by ? `${log.performed_by.slice(0, 8)}...` : 'Hệ Thống AI Engine');
+                    
+                    const requestTitle = log.requests?.title || (actionDetails.title as string) || 'Yêu cầu hệ thống';
+
+                    return (
+                      <tr key={log.id} className="hover:bg-slate-50/80 transition">
+                        <td className="p-3.5 font-mono text-slate-500 whitespace-nowrap">
+                          {new Date(log.created_at).toLocaleString('vi-VN')}
+                        </td>
+                        <td className="p-3.5">
+                          <span className={`px-2.5 py-1 rounded-full font-bold text-[10px] inline-block ${
+                            log.action.includes('APPROVED')
+                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                              : log.action.includes('REJECTED')
+                              ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                              : 'bg-blue-100 text-blue-800 border border-blue-300'
+                          }`}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-800">
+                          {performedEmail}
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-900">
+                          {requestTitle}
+                        </td>
+                        <td className="p-3.5 text-slate-500 max-w-xs truncate font-mono text-[11px]">
+                          {JSON.stringify(actionDetails)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
+
       </main>
     </div>
   );
