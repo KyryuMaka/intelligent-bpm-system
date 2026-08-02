@@ -2,7 +2,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { createClient, User as SupabaseUser } from '@supabase/supabase-js';
-import { CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle, LogOut, User, Lock, Mail, DollarSign, Ban, Clock } from 'lucide-react';
+import { 
+  CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle, LogOut, 
+  User, Lock, Mail, DollarSign, Ban, Clock, LayoutDashboard, Send, SlidersHorizontal 
+} from 'lucide-react';
 
 interface RequestItem {
   id: string;
@@ -45,6 +48,13 @@ export default function IntelligentBPMApp() {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<'REQUESTER' | 'MANAGER'>('REQUESTER');
 
+  // Active Tab state: 'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'>('REQUESTS');
+
+  // Filter state trong Dashboard
+  const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
+  const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
+
   // App state
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
@@ -55,15 +65,20 @@ export default function IntelligentBPMApp() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  // Lấy Profile & Role của người dùng
+  // Fetch User Role
   const fetchUserProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
     if (data) {
-      setUserRole(data.role as 'REQUESTER' | 'MANAGER');
+      const role = data.role as 'REQUESTER' | 'MANAGER';
+      setUserRole(role);
+      // Nếu là Requester, mặc định bật Tab "Đề xuất"
+      if (role === 'REQUESTER') {
+        setActiveTab('REQUESTS');
+      }
     }
   };
 
-  // Kiểm tra Session Đăng nhập
+  // Auth Session Listener
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -88,15 +103,15 @@ export default function IntelligentBPMApp() {
     };
   }, []);
 
-  // Load dữ liệu Realtime phân quyền theo Role
+  // Fetch Realtime Data theo Role
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
 
     const loadData = async () => {
-      // Nếu là MANAGER thì xem toàn bộ, nếu là REQUESTER chỉ xem đơn do chính mình tạo
       let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
       
+      // Strict RBAC: Requester chỉ lấy đơn của mình
       if (userRole === 'REQUESTER') {
         query = query.eq('created_by', user.id);
       }
@@ -107,7 +122,7 @@ export default function IntelligentBPMApp() {
         .from('audit_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(20);
 
       if (isMounted) {
         if (reqData) setRequests(reqData as RequestItem[]);
@@ -133,44 +148,37 @@ export default function IntelligentBPMApp() {
       .from('audit_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(10);
+      .limit(20);
 
     if (reqData) setRequests(reqData as RequestItem[]);
     if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
 
-  // 📊 THỐNG KÊ CHI TIÊU TRONG THÁNG (DÙNG CHO CHỨC NĂNG DASHBOARD QUẢN LÝ)
-  const monthlyStats = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-
-    // Lọc các request thuộc tháng & năm hiện tại
-    const currentMonthRequests = requests.filter((req) => {
+  // 📊 Thống kê Dashboard theo bộ lọc Tháng / Năm
+  const filteredDashboardStats = useMemo(() => {
+    const filteredRequests = requests.filter((req) => {
       const reqDate = new Date(req.created_at);
-      return reqDate.getMonth() === currentMonth && reqDate.getFullYear() === currentYear;
+      return reqDate.getMonth() === filterMonth && reqDate.getFullYear() === filterYear;
     });
 
-    // Tính tổng tiền đã duyệt trong tháng
-    const totalApprovedAmount = currentMonthRequests
+    const totalApproved = filteredRequests
       .filter((req) => req.status === 'APPROVED')
       .reduce((sum, req) => sum + Number(req.amount), 0);
 
-    // Đếm số đơn bị từ chối trong tháng
-    const rejectedCount = currentMonthRequests.filter((req) => req.status === 'REJECTED').length;
-
-    // Đếm số đơn đang chờ duyệt
-    const pendingCount = currentMonthRequests.filter((req) => req.status === 'PENDING').length;
+    const approvedCount = filteredRequests.filter((req) => req.status === 'APPROVED').length;
+    const rejectedCount = filteredRequests.filter((req) => req.status === 'REJECTED').length;
+    const pendingCount = filteredRequests.filter((req) => req.status === 'PENDING').length;
 
     return {
-      totalApprovedAmount,
+      totalApproved,
+      approvedCount,
       rejectedCount,
       pendingCount,
-      monthYearStr: `Tháng ${currentMonth + 1}/${currentYear}`,
+      totalCount: filteredRequests.length
     };
-  }, [requests]);
+  }, [requests, filterMonth, filterYear]);
 
-  // Xử lý XÁC THỰC
+  // Handle Auth
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -203,7 +211,7 @@ export default function IntelligentBPMApp() {
     setUser(null);
   };
 
-  // Xử lý Gửi đơn
+  // Handle Submit Đơn
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !amount) return alert('Vui lòng nhập đầy đủ!');
@@ -249,7 +257,7 @@ export default function IntelligentBPMApp() {
     }
   };
 
-  // Xử lý Phê duyệt đơn
+  // Handle Approve / Reject
   const handleUpdateStatus = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
     await supabase.from('requests').update({ status: newStatus }).eq('id', id);
     await supabase.from('audit_logs').insert({
@@ -261,7 +269,9 @@ export default function IntelligentBPMApp() {
     await refreshData();
   };
 
-  // MÀN HÌNH 1: CHƯA ĐĂNG NHẬP
+  // =========================================================
+  // MÀN HÌNH CHƯA ĐĂNG NHẬP
+  // =========================================================
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -312,7 +322,7 @@ export default function IntelligentBPMApp() {
                   onChange={(e) => setSelectedRole(e.target.value as 'REQUESTER' | 'MANAGER')}
                 >
                   <option value="REQUESTER">Nhân viên (Tạo đề xuất chi tiêu)</option>
-                  <option value="MANAGER">Quản lý (Phê duyệt & Xem Analytics)</option>
+                  <option value="MANAGER">Quản lý (Phê duyệt & Dashboard)</option>
                 </select>
               </div>
             )}
@@ -339,142 +349,244 @@ export default function IntelligentBPMApp() {
     );
   }
 
-  // MÀN HÌNH 2: ĐÃ ĐĂNG NHẬP
+  // =========================================================
+  // MÀN HÌNH ĐÃ ĐĂNG NHẬP VỚI SIDEBAR TAB
+  // =========================================================
   return (
-    <div className="min-h-screen bg-slate-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* HEADER */}
-        <header className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex justify-between items-center">
+    <div className="min-h-screen bg-slate-100 flex">
+      
+      {/* 🟢 SIDEBAR ĐIỀU HƯỚNG BÊN TRÁI */}
+      <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between shrink-0">
+        <div className="space-y-8">
+          {/* APP LOGO */}
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <Bot className="text-blue-600" /> Intelligent BPM System (Hybrid Architecture)
-            </h1>
-            <p className="text-slate-600 text-sm mt-1 font-medium">Lương Vĩ Thông - Đề thi số 2</p>
+            <div className="flex items-center gap-2 text-blue-600 font-extrabold text-lg">
+              <Bot className="w-7 h-7" /> BPM System
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium mt-1">Lương Vĩ Thông - Đề thi 2</p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-xs font-bold text-slate-800 flex items-center gap-1 justify-end">
-                <User size={14} /> {user.email}
-              </div>
-              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
-                userRole === 'MANAGER' ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
+          {/* TAB MENU ITEMS */}
+          <nav className="space-y-1.5">
+            {/* TAB 1: DASHBOARD (CHỈ HIỂN THỊ VỚI MANAGER) */}
+            {userRole === 'MANAGER' && (
+              <button
+                onClick={() => setActiveTab('DASHBOARD')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition ${
+                  activeTab === 'DASHBOARD'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <LayoutDashboard size={18} /> Dashboard Quản lý
+              </button>
+            )}
+
+            {/* TAB 2: ĐỀ XUẤT (HIỂN THỊ CẢ MANAGER VÀ REQUESTER) */}
+            <button
+              onClick={() => setActiveTab('REQUESTS')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition ${
+                activeTab === 'REQUESTS'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <Send size={18} /> Đề Xuất Chi Tiêu
+            </button>
+
+            {/* TAB 3: SYSTEM AUDIT LOG (CHỈ HIỂN THỊ VỚI MANAGER) */}
+            {userRole === 'MANAGER' && (
+              <button
+                onClick={() => setActiveTab('AUDIT_LOGS')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition ${
+                  activeTab === 'AUDIT_LOGS'
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                <ShieldCheck size={18} /> System Audit Logs
+              </button>
+            )}
+          </nav>
+        </div>
+
+        {/* PROFILE FOOTER */}
+        <div className="border-t border-slate-200 pt-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-100 p-2 rounded-full text-slate-600">
+              <User size={18} />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-slate-800 truncate">{user.email}</p>
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase inline-block mt-0.5 ${
+                userRole === 'MANAGER' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
               }`}>
                 Role: {userRole}
               </span>
             </div>
-            <button
-              onClick={handleLogout}
-              className="bg-slate-200 text-slate-700 p-2 rounded-lg hover:bg-slate-300 transition"
-              title="Đăng xuất"
-            >
-              <LogOut size={16} />
-            </button>
           </div>
-        </header>
 
-        {/* 📈 CÁC THẺ DASHBOARD STATS (CHỈ HIỂN THỊ KHI USER LÀ "MANAGER") */}
-        {userRole === 'MANAGER' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
-              <div className="bg-emerald-100 p-3 rounded-lg text-emerald-700">
-                <DollarSign size={24} />
-              </div>
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 py-2 rounded-lg text-xs font-bold transition border border-slate-200"
+          >
+            <LogOut size={14} /> Đăng xuất
+          </button>
+        </div>
+      </aside>
+
+      {/* 🔵 NỘI DUNG CHÍNH (MAIN CONTENT CONTAINER) */}
+      <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
+        
+        {/* ==================================================== */}
+        {/* TAB 1: DASHBOARD CỦA QUẢN LÝ (MANAGER ONLY) */}
+        {/* ==================================================== */}
+        {activeTab === 'DASHBOARD' && userRole === 'MANAGER' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Đã Duyệt Chi ({monthlyStats.monthYearStr})</p>
-                <p className="text-xl font-extrabold text-emerald-700 mt-0.5">
-                  {monthlyStats.totalApprovedAmount.toLocaleString('vi-VN')} VNĐ
-                </p>
+                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                  <LayoutDashboard className="text-blue-600" /> Báo Cáo Thống Kê Chi Tiêu Quản Lý
+                </h2>
+                <p className="text-slate-500 text-xs mt-1">Tổng quan các chỉ số chi tiêu & kết quả phê duyệt</p>
+              </div>
+
+              {/* BỘ LỌC THÁNG / NĂM */}
+              <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
+                <SlidersHorizontal size={16} className="text-slate-500" />
+                <select
+                  className="bg-white border border-slate-300 text-slate-800 text-xs font-bold p-1.5 rounded-md outline-none"
+                  value={filterMonth}
+                  onChange={(e) => setFilterMonth(Number(e.target.value))}
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i} value={i}>Tháng {i + 1}</option>
+                  ))}
+                </select>
+
+                <select
+                  className="bg-white border border-slate-300 text-slate-800 text-xs font-bold p-1.5 rounded-md outline-none"
+                  value={filterYear}
+                  onChange={(e) => setFilterYear(Number(e.target.value))}
+                >
+                  <option value={2025}>Năm 2025</option>
+                  <option value={2026}>Năm 2026</option>
+                </select>
               </div>
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
-              <div className="bg-rose-100 p-3 rounded-lg text-rose-700">
-                <Ban size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Đã Từ Chối ({monthlyStats.monthYearStr})</p>
-                <p className="text-xl font-extrabold text-rose-700 mt-0.5">
-                  {monthlyStats.rejectedCount} Request
+            {/* BẢNG CHỈ SỐ THỐNG KÊ (CARDS) */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold uppercase">Tổng Chi Tiêu Đã Duyệt</span>
+                  <DollarSign className="text-emerald-600" size={20} />
+                </div>
+                <p className="text-2xl font-black text-emerald-700">
+                  {filteredDashboardStats.totalApproved.toLocaleString('vi-VN')} VNĐ
                 </p>
+                <p className="text-[11px] text-slate-400">Từ {filteredDashboardStats.approvedCount} đơn đã chấp thuận</p>
               </div>
-            </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
-              <div className="bg-amber-100 p-3 rounded-lg text-amber-700">
-                <Clock size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-bold text-slate-500 uppercase">Đang Chờ Duyệt</p>
-                <p className="text-xl font-extrabold text-amber-700 mt-0.5">
-                  {monthlyStats.pendingCount} Request
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold uppercase">Đơn Đã Từ Chối</span>
+                  <Ban className="text-rose-600" size={20} />
+                </div>
+                <p className="text-2xl font-black text-rose-700">
+                  {filteredDashboardStats.rejectedCount} Request
                 </p>
+                <p className="text-[11px] text-slate-400">Không đủ điều kiện / rủi ro</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold uppercase">Đơn Đang Chờ Duyệt</span>
+                  <Clock className="text-amber-600" size={20} />
+                </div>
+                <p className="text-2xl font-black text-amber-600">
+                  {filteredDashboardStats.pendingCount} Request
+                </p>
+                <p className="text-[11px] text-slate-400">Cần xử lý phê duyệt</p>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
+                <div className="flex justify-between items-center text-slate-500">
+                  <span className="text-xs font-bold uppercase">Tổng Số Request</span>
+                  <FileText className="text-blue-600" size={20} />
+                </div>
+                <p className="text-2xl font-black text-slate-800">
+                  {filteredDashboardStats.totalCount} Request
+                </p>
+                <p className="text-[11px] text-slate-400">Khởi tạo trong tháng lựa chọn</p>
               </div>
             </div>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* CỘT 1: FORM TẠO ĐƠN */}
-          <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-            <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <PlusCircle className="text-blue-600" /> Tạo Đề Xuất Chi Tiêu
-            </h2>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-slate-800 mb-1">Tiêu đề yêu cầu</label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Mua máy in văn phòng"
-                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-              </div>
+        {/* ==================================================== */}
+        {/* TAB 2: ĐỀ XUẤT (TẠO ĐƠN & REAL-TIME DASHBOARD) */}
+        {/* ==================================================== */}
+        {activeTab === 'REQUESTS' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* CỘT TẠO ĐƠN */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
+              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <PlusCircle className="text-blue-600" /> Tạo Đề Xuất Chi Tiêu
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-bold text-slate-800 mb-1">Tiêu đề yêu cầu</label>
+                  <input
+                    type="text"
+                    placeholder="Ví dụ: Mua máy in văn phòng"
+                    className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-800 mb-1">Số tiền (VNĐ)</label>
-                <input
-                  type="number"
-                  placeholder="12000000"
-                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-800 mb-1">Số tiền (VNĐ)</label>
+                  <input
+                    type="number"
+                    placeholder="12000000"
+                    className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                  />
+                </div>
 
-              <div>
-                <label className="block text-sm font-bold text-slate-800 mb-1">Mô tả chi tiết</label>
-                <textarea
-                  rows={3}
-                  placeholder="Mô tả mục đích chi tiêu..."
-                  className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
-              </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-800 mb-1">Mô tả chi tiết</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Mô tả mục đích chi tiêu..."
+                    className="w-full border-2 border-slate-300 bg-white text-slate-900 font-medium p-2.5 rounded-lg text-sm focus:border-blue-600 outline-none"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                  />
+                </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm hover:bg-blue-700 transition"
-              >
-                {loading ? 'AI Gemini Đang Phân Tích...' : 'Gửi Phê Duyệt'}
-              </button>
-            </form>
-          </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg text-sm hover:bg-blue-700 transition"
+                >
+                  {loading ? 'AI Gemini Đang Phân Tích...' : 'Gửi Phê Duyệt'}
+                </button>
+              </form>
+            </div>
 
-          {/* CỘT 2 & 3: REAL-TIME DASHBOARD & AUDIT LOGS */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            {/* CỘT DASHBOARD DANH SÁCH ĐƠN REALTIME */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 justify-between">
                 <span className="flex items-center gap-2">
                   <FileText className="text-indigo-600" /> Real-time Approval Dashboard
                 </span>
-                <span className="text-xs font-normal text-slate-500">
-                  {userRole === 'MANAGER' ? 'Hiển thị: Tất cả các đơn' : 'Hiển thị: Đơn cá nhân của bạn'}
+                <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+                  {userRole === 'MANAGER' ? 'Quản lý: Xem tất cả các đơn' : 'Nhân viên: Chỉ xem đơn cá nhân'}
                 </span>
               </h2>
 
@@ -519,7 +631,7 @@ export default function IntelligentBPMApp() {
                       </div>
                     )}
 
-                    {/* NÚT THAO TÁC XÁC NHẬN - CHỈ CÓ ROLE "MANAGER" MỚI THẤY VÀ THỰC HIỆN ĐƯỢC */}
+                    {/* NÚT THAO TÁC - CHỈ CÓ QUẢN LÝ MỚI THẤY VÀ THỰC HIỆN ĐƯỢC */}
                     {req.status === 'PENDING' && (
                       <div className="flex gap-2 justify-end pt-2">
                         {userRole === 'MANAGER' ? (
@@ -549,26 +661,37 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* AUDIT LOG ENGINE */}
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-              <h2 className="text-md font-bold text-slate-900 mb-3 flex items-center gap-2">
-                <ShieldCheck className="text-emerald-600" /> System Audit Logs (Minh bạch kiểm toán)
+          </div>
+        )}
+
+        {/* ==================================================== */}
+        {/* TAB 3: SYSTEM AUDIT LOG (MANAGER ONLY) */}
+        {/* ==================================================== */}
+        {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="text-emerald-600" /> System Audit Logs (Nhật Ký Kiểm Toán Minh Bạch)
               </h2>
-              <div className="bg-slate-950 text-slate-100 p-4 rounded-lg font-mono text-xs max-h-44 overflow-y-auto space-y-1.5 border border-slate-800">
-                {auditLogs.map((log) => (
-                  <div key={log.id} className="border-b border-slate-800 pb-1">
-                    <span className="text-slate-400">[{new Date(log.created_at).toLocaleTimeString()}]</span>{' '}
-                    <span className="text-emerald-400 font-bold">{log.action}</span> - Details:{' '}
-                    {JSON.stringify(log.details)}
-                  </div>
-                ))}
-              </div>
+              <p className="text-slate-500 text-xs mt-1">Truy vết toàn bộ lịch sử thao tác của nhân viên, AI và cấp quản lý</p>
             </div>
 
+            <div className="bg-slate-950 text-slate-100 p-5 rounded-xl font-mono text-xs max-h-[550px] overflow-y-auto space-y-2 border border-slate-800 shadow-inner">
+              {auditLogs.map((log) => (
+                <div key={log.id} className="border-b border-slate-800 pb-2 flex items-start gap-3">
+                  <span className="text-slate-500 shrink-0">[{new Date(log.created_at).toLocaleTimeString()}]</span>
+                  <div>
+                    <span className="text-emerald-400 font-bold uppercase">{log.action}</span>
+                    <span className="text-slate-400 ml-2">Details: {JSON.stringify(log.details)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
+        )}
 
-        </div>
-      </div>
+      </main>
+
     </div>
   );
 }
