@@ -25,8 +25,16 @@ interface AuditLogItem {
   created_at: string;
 }
 
+const getCleanSupabaseUrl = (rawUrl?: string) => {
+  if (!rawUrl) return '';
+  return rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '');
+};
+
+const rawSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const cleanSupabaseUrl = getCleanSupabaseUrl(rawSupabaseUrl);
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  cleanSupabaseUrl,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
