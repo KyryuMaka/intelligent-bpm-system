@@ -49,7 +49,7 @@ export default function IntelligentBPMApp() {
   const [selectedRole, setSelectedRole] = useState<'REQUESTER' | 'MANAGER'>('REQUESTER');
 
   // Active Tab state: 'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'
-  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'>('REQUESTS');
+  const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'>('DASHBOARD');
 
   // Filter state trong Dashboard
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
@@ -71,7 +71,6 @@ export default function IntelligentBPMApp() {
     if (data) {
       const role = data.role as 'REQUESTER' | 'MANAGER';
       setUserRole(role);
-      // Nếu là Requester, mặc định bật Tab "Đề xuất"
       if (role === 'REQUESTER') {
         setActiveTab('REQUESTS');
       }
@@ -111,7 +110,6 @@ export default function IntelligentBPMApp() {
     const loadData = async () => {
       let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
       
-      // Strict RBAC: Requester chỉ lấy đơn của mình
       if (userRole === 'REQUESTER') {
         query = query.eq('created_by', user.id);
       }
@@ -154,27 +152,31 @@ export default function IntelligentBPMApp() {
     if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
 
-  // 📊 Thống kê Dashboard theo bộ lọc Tháng / Năm
-  const filteredDashboardStats = useMemo(() => {
+  // 📊 Thống kê & Phân loại Danh sách Request cho Dashboard
+  const dashboardData = useMemo(() => {
+    // 1. Lọc đơn theo Tháng & Năm đã chọn
     const filteredRequests = requests.filter((req) => {
       const reqDate = new Date(req.created_at);
       return reqDate.getMonth() === filterMonth && reqDate.getFullYear() === filterYear;
     });
 
-    const totalApproved = filteredRequests
-      .filter((req) => req.status === 'APPROVED')
-      .reduce((sum, req) => sum + Number(req.amount), 0);
+    // 2. Phân loại theo 3 trạng thái
+    const approvedList = filteredRequests.filter((req) => req.status === 'APPROVED');
+    const pendingList = filteredRequests.filter((req) => req.status === 'PENDING');
+    const rejectedList = filteredRequests.filter((req) => req.status === 'REJECTED');
 
-    const approvedCount = filteredRequests.filter((req) => req.status === 'APPROVED').length;
-    const rejectedCount = filteredRequests.filter((req) => req.status === 'REJECTED').length;
-    const pendingCount = filteredRequests.filter((req) => req.status === 'PENDING').length;
+    // 3. Tính tổng số tiền đã duyệt
+    const totalApproved = approvedList.reduce((sum, req) => sum + Number(req.amount), 0);
 
     return {
+      approvedList,
+      pendingList,
+      rejectedList,
       totalApproved,
-      approvedCount,
-      rejectedCount,
-      pendingCount,
-      totalCount: filteredRequests.length
+      approvedCount: approvedList.length,
+      pendingCount: pendingList.length,
+      rejectedCount: rejectedList.length,
+      totalCount: filteredRequests.length,
     };
   }, [requests, filterMonth, filterYear]);
 
@@ -269,9 +271,7 @@ export default function IntelligentBPMApp() {
     await refreshData();
   };
 
-  // =========================================================
   // MÀN HÌNH CHƯA ĐĂNG NHẬP
-  // =========================================================
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -349,16 +349,13 @@ export default function IntelligentBPMApp() {
     );
   }
 
-  // =========================================================
   // MÀN HÌNH ĐÃ ĐĂNG NHẬP VỚI SIDEBAR TAB
-  // =========================================================
   return (
     <div className="min-h-screen bg-slate-100 flex">
       
-      {/* 🟢 SIDEBAR ĐIỀU HƯỚNG BÊN TRÁI */}
+      {/* SIDEBAR BÊN TRÁI */}
       <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between shrink-0">
         <div className="space-y-8">
-          {/* APP LOGO */}
           <div>
             <div className="flex items-center gap-2 text-blue-600 font-extrabold text-lg">
               <Bot className="w-7 h-7" /> BPM System
@@ -366,9 +363,7 @@ export default function IntelligentBPMApp() {
             <p className="text-[11px] text-slate-500 font-medium mt-1">Lương Vĩ Thông - Đề thi 2</p>
           </div>
 
-          {/* TAB MENU ITEMS */}
           <nav className="space-y-1.5">
-            {/* TAB 1: DASHBOARD (CHỈ HIỂN THỊ VỚI MANAGER) */}
             {userRole === 'MANAGER' && (
               <button
                 onClick={() => setActiveTab('DASHBOARD')}
@@ -382,7 +377,6 @@ export default function IntelligentBPMApp() {
               </button>
             )}
 
-            {/* TAB 2: ĐỀ XUẤT (HIỂN THỊ CẢ MANAGER VÀ REQUESTER) */}
             <button
               onClick={() => setActiveTab('REQUESTS')}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold text-xs transition ${
@@ -394,7 +388,6 @@ export default function IntelligentBPMApp() {
               <Send size={18} /> Đề Xuất Chi Tiêu
             </button>
 
-            {/* TAB 3: SYSTEM AUDIT LOG (CHỈ HIỂN THỊ VỚI MANAGER) */}
             {userRole === 'MANAGER' && (
               <button
                 onClick={() => setActiveTab('AUDIT_LOGS')}
@@ -410,7 +403,6 @@ export default function IntelligentBPMApp() {
           </nav>
         </div>
 
-        {/* PROFILE FOOTER */}
         <div className="border-t border-slate-200 pt-4 space-y-3">
           <div className="flex items-center gap-2">
             <div className="bg-slate-100 p-2 rounded-full text-slate-600">
@@ -435,23 +427,22 @@ export default function IntelligentBPMApp() {
         </div>
       </aside>
 
-      {/* 🔵 NỘI DUNG CHÍNH (MAIN CONTENT CONTAINER) */}
-      <main className="flex-1 p-8 overflow-y-auto max-w-7xl">
+      {/* MAIN CONTENT */}
+      <main className="flex-1 p-8 overflow-y-auto max-w-7xl space-y-6">
         
-        {/* ==================================================== */}
-        {/* TAB 1: DASHBOARD CỦA QUẢN LÝ (MANAGER ONLY) */}
-        {/* ==================================================== */}
+        {/* TAB 1: DASHBOARD QUẢN LÝ (MANAGER ONLY) */}
         {activeTab === 'DASHBOARD' && userRole === 'MANAGER' && (
           <div className="space-y-6">
+            
+            {/* HEADER DASHBOARD WITH FILTER */}
             <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                   <LayoutDashboard className="text-blue-600" /> Báo Cáo Thống Kê Chi Tiêu Quản Lý
                 </h2>
-                <p className="text-slate-500 text-xs mt-1">Tổng quan các chỉ số chi tiêu & kết quả phê duyệt</p>
+                <p className="text-slate-500 text-xs mt-1">Tổng quan các chỉ số chi tiêu & danh sách chi tiết theo trạng thái</p>
               </div>
 
-              {/* BỘ LỌC THÁNG / NĂM */}
               <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
                 <SlidersHorizontal size={16} className="text-slate-500" />
                 <select
@@ -475,7 +466,7 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* BẢNG CHỈ SỐ THỐNG KÊ (CARDS) */}
+            {/* THẺ THỐNG KÊ TỔNG QUAN */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
                 <div className="flex justify-between items-center text-slate-500">
@@ -483,9 +474,9 @@ export default function IntelligentBPMApp() {
                   <DollarSign className="text-emerald-600" size={20} />
                 </div>
                 <p className="text-2xl font-black text-emerald-700">
-                  {filteredDashboardStats.totalApproved.toLocaleString('vi-VN')} VNĐ
+                  {dashboardData.totalApproved.toLocaleString('vi-VN')} VNĐ
                 </p>
-                <p className="text-[11px] text-slate-400">Từ {filteredDashboardStats.approvedCount} đơn đã chấp thuận</p>
+                <p className="text-[11px] text-slate-400">Từ {dashboardData.approvedCount} đơn đã chấp thuận</p>
               </div>
 
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
@@ -494,7 +485,7 @@ export default function IntelligentBPMApp() {
                   <Ban className="text-rose-600" size={20} />
                 </div>
                 <p className="text-2xl font-black text-rose-700">
-                  {filteredDashboardStats.rejectedCount} Request
+                  {dashboardData.rejectedCount} Request
                 </p>
                 <p className="text-[11px] text-slate-400">Không đủ điều kiện / rủi ro</p>
               </div>
@@ -505,7 +496,7 @@ export default function IntelligentBPMApp() {
                   <Clock className="text-amber-600" size={20} />
                 </div>
                 <p className="text-2xl font-black text-amber-600">
-                  {filteredDashboardStats.pendingCount} Request
+                  {dashboardData.pendingCount} Request
                 </p>
                 <p className="text-[11px] text-slate-400">Cần xử lý phê duyệt</p>
               </div>
@@ -516,21 +507,101 @@ export default function IntelligentBPMApp() {
                   <FileText className="text-blue-600" size={20} />
                 </div>
                 <p className="text-2xl font-black text-slate-800">
-                  {filteredDashboardStats.totalCount} Request
+                  {dashboardData.totalCount} Request
                 </p>
                 <p className="text-[11px] text-slate-400">Khởi tạo trong tháng lựa chọn</p>
               </div>
             </div>
+
+            {/* 📊 3 BẢNG DANH SÁCH CHI TIẾT THEO TRẠNG THÁI (ĐÃ DUYỆT / CHỜ DUYỆT / TỪ CHỐI) */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+              
+              {/* CỘT 1: ĐÃ DUYỆT (APPROVED) */}
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-emerald-200 space-y-4">
+                <h3 className="text-sm font-bold text-emerald-800 flex items-center justify-between border-b border-emerald-100 pb-2">
+                  <span className="flex items-center gap-1.5"><CheckCircle size={16} /> Đã Duyệt Chi</span>
+                  <span className="bg-emerald-100 text-emerald-800 text-xs px-2 py-0.5 rounded-full font-extrabold">
+                    {dashboardData.approvedCount}
+                  </span>
+                </h3>
+
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {dashboardData.approvedList.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Không có đề xuất nào trong tháng.</p>
+                  )}
+                  {dashboardData.approvedList.map((item) => (
+                    <div key={item.id} className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-1">
+                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500 font-medium">Số tiền:</span>
+                        <span className="font-extrabold text-emerald-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CỘT 2: ĐANG CHỜ DUYỆT (PENDING) */}
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-amber-200 space-y-4">
+                <h3 className="text-sm font-bold text-amber-800 flex items-center justify-between border-b border-amber-100 pb-2">
+                  <span className="flex items-center gap-1.5"><Clock size={16} /> Đang Chờ Duyệt</span>
+                  <span className="bg-amber-100 text-amber-800 text-xs px-2 py-0.5 rounded-full font-extrabold">
+                    {dashboardData.pendingCount}
+                  </span>
+                </h3>
+
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {dashboardData.pendingList.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Không có đơn đang chờ.</p>
+                  )}
+                  {dashboardData.pendingList.map((item) => (
+                    <div key={item.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-1">
+                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500 font-medium">Số tiền:</span>
+                        <span className="font-extrabold text-amber-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* CỘT 3: ĐÃ TỪ CHỐI (REJECTED) */}
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-rose-200 space-y-4">
+                <h3 className="text-sm font-bold text-rose-800 flex items-center justify-between border-b border-rose-100 pb-2">
+                  <span className="flex items-center gap-1.5"><XCircle size={16} /> Đã Từ Chối</span>
+                  <span className="bg-rose-100 text-rose-800 text-xs px-2 py-0.5 rounded-full font-extrabold">
+                    {dashboardData.rejectedCount}
+                  </span>
+                </h3>
+
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {dashboardData.rejectedList.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Không có đơn bị từ chối.</p>
+                  )}
+                  {dashboardData.rejectedList.map((item) => (
+                    <div key={item.id} className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 space-y-1">
+                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-slate-500 font-medium">Số tiền:</span>
+                        <span className="font-extrabold text-rose-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+
           </div>
         )}
 
-        {/* ==================================================== */}
-        {/* TAB 2: ĐỀ XUẤT (TẠO ĐƠN & REAL-TIME DASHBOARD) */}
-        {/* ==================================================== */}
+        {/* TAB 2: ĐỀ XUẤT */}
         {activeTab === 'REQUESTS' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* CỘT TẠO ĐƠN */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <PlusCircle className="text-blue-600" /> Tạo Đề Xuất Chi Tiêu
@@ -579,7 +650,6 @@ export default function IntelligentBPMApp() {
               </form>
             </div>
 
-            {/* CỘT DASHBOARD DANH SÁCH ĐƠN REALTIME */}
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 justify-between">
                 <span className="flex items-center gap-2">
@@ -631,7 +701,6 @@ export default function IntelligentBPMApp() {
                       </div>
                     )}
 
-                    {/* NÚT THAO TÁC - CHỈ CÓ QUẢN LÝ MỚI THẤY VÀ THỰC HIỆN ĐƯỢC */}
                     {req.status === 'PENDING' && (
                       <div className="flex gap-2 justify-end pt-2">
                         {userRole === 'MANAGER' ? (
@@ -664,9 +733,7 @@ export default function IntelligentBPMApp() {
           </div>
         )}
 
-        {/* ==================================================== */}
         {/* TAB 3: SYSTEM AUDIT LOG (MANAGER ONLY) */}
-        {/* ==================================================== */}
         {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div>
