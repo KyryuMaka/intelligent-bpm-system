@@ -40,7 +40,6 @@ const supabase = createClient(
 );
 
 export default function IntelligentBPMApp() {
-  // Auth state
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [userRole, setUserRole] = useState<'REQUESTER' | 'MANAGER'>('REQUESTER');
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
@@ -48,24 +47,19 @@ export default function IntelligentBPMApp() {
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<'REQUESTER' | 'MANAGER'>('REQUESTER');
 
-  // Active Tab state: 'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'
   const [activeTab, setActiveTab] = useState<'DASHBOARD' | 'REQUESTS' | 'AUDIT_LOGS'>('DASHBOARD');
 
-  // Filter state trong Dashboard
   const [filterMonth, setFilterMonth] = useState<number>(new Date().getMonth());
   const [filterYear, setFilterYear] = useState<number>(new Date().getFullYear());
 
-  // App state
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Form state
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  // Fetch User Role
   const fetchUserProfile = async (userId: string) => {
     const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
     if (data) {
@@ -77,7 +71,6 @@ export default function IntelligentBPMApp() {
     }
   };
 
-  // Auth Session Listener
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
@@ -102,7 +95,6 @@ export default function IntelligentBPMApp() {
     };
   }, []);
 
-  // Fetch Realtime Data theo Role
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
@@ -152,20 +144,16 @@ export default function IntelligentBPMApp() {
     if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
 
-  // 📊 Thống kê & Phân loại Danh sách Request cho Dashboard
   const dashboardData = useMemo(() => {
-    // 1. Lọc đơn theo Tháng & Năm đã chọn
     const filteredRequests = requests.filter((req) => {
       const reqDate = new Date(req.created_at);
       return reqDate.getMonth() === filterMonth && reqDate.getFullYear() === filterYear;
     });
 
-    // 2. Phân loại theo 3 trạng thái
     const approvedList = filteredRequests.filter((req) => req.status === 'APPROVED');
     const pendingList = filteredRequests.filter((req) => req.status === 'PENDING');
     const rejectedList = filteredRequests.filter((req) => req.status === 'REJECTED');
 
-    // 3. Tính tổng số tiền đã duyệt
     const totalApproved = approvedList.reduce((sum, req) => sum + Number(req.amount), 0);
 
     return {
@@ -180,7 +168,6 @@ export default function IntelligentBPMApp() {
     };
   }, [requests, filterMonth, filterYear]);
 
-  // Handle Auth
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -213,7 +200,6 @@ export default function IntelligentBPMApp() {
     setUser(null);
   };
 
-  // Handle Submit Đơn
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !amount) return alert('Vui lòng nhập đầy đủ!');
@@ -259,7 +245,6 @@ export default function IntelligentBPMApp() {
     }
   };
 
-  // Handle Approve / Reject
   const handleUpdateStatus = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
     await supabase.from('requests').update({ status: newStatus }).eq('id', id);
     await supabase.from('audit_logs').insert({
@@ -271,7 +256,6 @@ export default function IntelligentBPMApp() {
     await refreshData();
   };
 
-  // MÀN HÌNH CHƯA ĐĂNG NHẬP
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -349,11 +333,8 @@ export default function IntelligentBPMApp() {
     );
   }
 
-  // MÀN HÌNH ĐÃ ĐĂNG NHẬP VỚI SIDEBAR TAB
   return (
     <div className="min-h-screen bg-slate-100 flex">
-      
-      {/* SIDEBAR BÊN TRÁI */}
       <aside className="w-64 bg-white border-r border-slate-200 p-6 flex flex-col justify-between shrink-0">
         <div className="space-y-8">
           <div>
@@ -427,14 +408,9 @@ export default function IntelligentBPMApp() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 p-8 overflow-y-auto max-w-7xl space-y-6">
-        
-        {/* TAB 1: DASHBOARD QUẢN LÝ (MANAGER ONLY) */}
         {activeTab === 'DASHBOARD' && userRole === 'MANAGER' && (
           <div className="space-y-6">
-            
-            {/* HEADER DASHBOARD WITH FILTER */}
             <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <div>
                 <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
@@ -466,7 +442,6 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* THẺ THỐNG KÊ TỔNG QUAN */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 space-y-2">
                 <div className="flex justify-between items-center text-slate-500">
@@ -513,10 +488,8 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* 📊 3 BẢNG DANH SÁCH CHI TIẾT THEO TRẠNG THÁI (ĐÃ DUYỆT / CHỜ DUYỆT / TỪ CHỐI) */}
+            {/* 3 BẢNG CÓ HIỂN THỊ THÊM THẺ AI INSIGHT TỰ ĐỘNG */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
-              
-              {/* CỘT 1: ĐÃ DUYỆT (APPROVED) */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-emerald-200 space-y-4">
                 <h3 className="text-sm font-bold text-emerald-800 flex items-center justify-between border-b border-emerald-100 pb-2">
                   <span className="flex items-center gap-1.5"><CheckCircle size={16} /> Đã Duyệt Chi</span>
@@ -525,24 +498,31 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
                   {dashboardData.approvedList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đề xuất nào trong tháng.</p>
                   )}
                   {dashboardData.approvedList.map((item) => (
-                    <div key={item.id} className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-1">
+                    <div key={item.id} className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-2">
                       <p className="text-xs font-bold text-slate-800">{item.title}</p>
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-slate-500 font-medium">Số tiền:</span>
                         <span className="font-extrabold text-emerald-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                      {item.ai_summary && (
+                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-emerald-200">
+                          <p className="font-bold text-emerald-900 flex items-center gap-1">
+                            <Bot size={12} /> AI Insight:
+                          </p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* CỘT 2: ĐANG CHỜ DUYỆT (PENDING) */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-amber-200 space-y-4">
                 <h3 className="text-sm font-bold text-amber-800 flex items-center justify-between border-b border-amber-100 pb-2">
                   <span className="flex items-center gap-1.5"><Clock size={16} /> Đang Chờ Duyệt</span>
@@ -551,24 +531,37 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
                   {dashboardData.pendingList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đơn đang chờ.</p>
                   )}
                   {dashboardData.pendingList.map((item) => (
-                    <div key={item.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-1">
+                    <div key={item.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-2">
                       <p className="text-xs font-bold text-slate-800">{item.title}</p>
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-slate-500 font-medium">Số tiền:</span>
                         <span className="font-extrabold text-amber-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                      {item.ai_summary && (
+                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-amber-200">
+                          <p className="font-bold text-amber-900 flex items-center gap-1">
+                            <Bot size={12} /> AI Insight:
+                          </p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                          <p className="text-slate-700">
+                            <b>Rủi ro:</b>{' '}
+                            <span className={item.risk_score === 'HIGH' ? 'text-red-600 font-black' : 'text-emerald-600 font-black'}>
+                              {item.risk_score}
+                            </span>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* CỘT 3: ĐÃ TỪ CHỐI (REJECTED) */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-rose-200 space-y-4">
                 <h3 className="text-sm font-bold text-rose-800 flex items-center justify-between border-b border-rose-100 pb-2">
                   <span className="flex items-center gap-1.5"><XCircle size={16} /> Đã Từ Chối</span>
@@ -577,29 +570,34 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
                   {dashboardData.rejectedList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đơn bị từ chối.</p>
                   )}
                   {dashboardData.rejectedList.map((item) => (
-                    <div key={item.id} className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 space-y-1">
+                    <div key={item.id} className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 space-y-2">
                       <p className="text-xs font-bold text-slate-800">{item.title}</p>
                       <div className="flex justify-between items-center text-[11px]">
                         <span className="text-slate-500 font-medium">Số tiền:</span>
                         <span className="font-extrabold text-rose-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate">ID User: {item.created_by || 'Khách'}</p>
+                      {item.ai_summary && (
+                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-rose-200">
+                          <p className="font-bold text-rose-900 flex items-center gap-1">
+                            <Bot size={12} /> AI Insight:
+                          </p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
-
             </div>
-
           </div>
         )}
 
-        {/* TAB 2: ĐỀ XUẤT */}
         {activeTab === 'REQUESTS' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
@@ -729,11 +727,9 @@ export default function IntelligentBPMApp() {
                 ))}
               </div>
             </div>
-
           </div>
         )}
 
-        {/* TAB 3: SYSTEM AUDIT LOG (MANAGER ONLY) */}
         {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div>
@@ -756,9 +752,7 @@ export default function IntelligentBPMApp() {
             </div>
           </div>
         )}
-
       </main>
-
     </div>
   );
 }
