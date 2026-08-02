@@ -122,7 +122,13 @@ export default function IntelligentBPMApp() {
       await refreshData();
       alert('Đã gửi yêu cầu thành công và được AI phân tích!');
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : 'Đã có lỗi xảy ra';
+      console.error('Submit error details:', err);
+      let errorMessage = 'Đã có lỗi xảy ra';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'object' && err !== null && 'message' in err) {
+        errorMessage = String((err as { message: unknown }).message);
+      }
       alert('Có lỗi xảy ra: ' + errorMessage);
     } finally {
       setLoading(false);
