@@ -4,14 +4,36 @@ import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle } from 'lucide-react';
 
+// 📌 Định nghĩa kiểu dữ liệu chuẩn (Thay thế hoàn toàn cho 'any')
+interface RequestItem {
+  id: string;
+  title: string;
+  amount: number;
+  description: string | null;
+  category: string | null;
+  ai_summary: string | null;
+  risk_score: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  created_at: string;
+}
+
+interface AuditLogItem {
+  id: string;
+  request_id: string;
+  action: string;
+  performed_by: string | null;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
 
 export default function IntelligentBPMApp() {
-  const [requests, setRequests] = useState<any[]>([]);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [requests, setRequests] = useState<RequestItem[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [loading, setLoading] = useState(false);
 
   // State cho Form tạo đơn
@@ -19,8 +41,37 @@ export default function IntelligentBPMApp() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
 
-  // 1. Tải danh sách đơn & audit log từ Supabase
-  const fetchData = async () => {
+  // 1. Tải dữ liệu ban đầu từ Supabase (Chuẩn Async Effect, tránh cascading renders)
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInitialData = async () => {
+      const { data: reqData } = await supabase
+        .from('requests')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      const { data: logData } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (isMounted) {
+        if (reqData) setRequests(reqData as RequestItem[]);
+        if (logData) setAuditLogs(logData as AuditLogItem[]);
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Hàm cập nhật lại danh sách dữ liệu sau khi tương tác
+  const refreshData = async () => {
     const { data: reqData } = await supabase
       .from('requests')
       .select('*')
@@ -32,15 +83,11 @@ export default function IntelligentBPMApp() {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    if (reqData) setRequests(reqData);
-    if (logData) setAuditLogs(logData);
+    if (reqData) setRequests(reqData as RequestItem[]);
+    if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  // 2. Hàm gửi đơn mua sắm
+  // 3. Hàm gửi đơn đề xuất mua sắm / chi tiêu
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title || !amount) return alert('Vui lòng nhập đầy đủ thông tin!');
@@ -48,7 +95,7 @@ export default function IntelligentBPMApp() {
     setLoading(true);
 
     try {
-      // 2a. Tạo bản ghi mới vào Supabase
+      // 3a. Tạo bản ghi mới vào Supabase
       const { data, error } = await supabase
         .from('requests')
         .insert([
@@ -64,7 +111,7 @@ export default function IntelligentBPMApp() {
 
       if (error) throw error;
 
-      // 2b. Gọi Custom Extension API để xử lý AI & Audit Logging
+      // 3b. Gọi Custom Extension Backend API (xử lý AI & Audit Log)
       await fetch('/api/process-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -76,31 +123,32 @@ export default function IntelligentBPMApp() {
         }),
       });
 
-      // Reset Form
+      // Reset form & cập nhật lại danh sách
       setTitle('');
       setAmount('');
       setDescription('');
-      fetchData();
+      await refreshData();
       alert('Đã gửi yêu cầu thành công và được AI phân tích!');
-    } catch (err: any) {
-      alert('Có lỗi xảy ra: ' + err.message);
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Đã có lỗi xảy ra';
+      alert('Có lỗi xảy ra: ' + errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Hàm Phê duyệt / Từ chối đơn (Quản lý)
+  // 4. Hàm Phê duyệt / Từ chối đơn (Quản lý)
   const handleUpdateStatus = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
     await supabase.from('requests').update({ status: newStatus }).eq('id', id);
 
-    // Ghi log phê duyệt
+    // Ghi audit log cho hành động của quản lý
     await supabase.from('audit_logs').insert({
       request_id: id,
       action: `MANAGER_${newStatus}`,
       details: { updated_at: new Date().toISOString() },
     });
 
-    fetchData();
+    await refreshData();
   };
 
   return (
@@ -203,7 +251,7 @@ export default function IntelligentBPMApp() {
                       </span>
                     </div>
 
-                    {/* AI INSIGHTS BOX */}
+                    {/* THÔNG TIN AI PHÂN TÍCH */}
                     {req.ai_summary && (
                       <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs space-y-1">
                         <div className="flex items-center gap-1 font-semibold text-blue-800">
@@ -220,18 +268,18 @@ export default function IntelligentBPMApp() {
                       </div>
                     )}
 
-                    {/* NÚT THAO TÁC PHÊ DUYỆT */}
+                    {/* THAO TÁC NÚT BẤM CỦA QUẢN LÝ */}
                     {req.status === 'PENDING' && (
                       <div className="flex gap-2 justify-end pt-2">
                         <button
                           onClick={() => handleUpdateStatus(req.id, 'APPROVED')}
-                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700"
+                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-green-700 transition"
                         >
                           <CheckCircle size={14} /> Phê Duyệt
                         </button>
                         <button
                           onClick={() => handleUpdateStatus(req.id, 'REJECTED')}
-                          className="flex items-center gap-1 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-red-700"
+                          className="flex items-center gap-1 bg-red-600 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-red-700 transition"
                         >
                           <XCircle size={14} /> Từ Chối
                         </button>
