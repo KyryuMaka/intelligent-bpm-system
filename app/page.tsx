@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createClient, User as SupabaseUser } from '@supabase/supabase-js';
-import { CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle, LogOut, User, Lock, Mail } from 'lucide-react';
+import { CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle, LogOut, User, Lock, Mail, DollarSign, Ban, Clock } from 'lucide-react';
 
 interface RequestItem {
   id: string;
@@ -13,6 +13,7 @@ interface RequestItem {
   ai_summary: string | null;
   risk_score: string | null;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  created_by: string | null;
   created_at: string;
 }
 
@@ -36,7 +37,7 @@ const supabase = createClient(
 );
 
 export default function IntelligentBPMApp() {
-  // Auth state (Sử dụng SupabaseUser thay cho any)
+  // Auth state
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [userRole, setUserRole] = useState<'REQUESTER' | 'MANAGER'>('REQUESTER');
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
@@ -87,16 +88,20 @@ export default function IntelligentBPMApp() {
     };
   }, []);
 
-  // Load dữ liệu Realtime
+  // Load dữ liệu Realtime phân quyền theo Role
   useEffect(() => {
     if (!user) return;
     let isMounted = true;
 
     const loadData = async () => {
-      const { data: reqData } = await supabase
-        .from('requests')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Nếu là MANAGER thì xem toàn bộ, nếu là REQUESTER chỉ xem đơn do chính mình tạo
+      let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
+      
+      if (userRole === 'REQUESTER') {
+        query = query.eq('created_by', user.id);
+      }
+
+      const { data: reqData } = await query;
 
       const { data: logData } = await supabase
         .from('audit_logs')
@@ -112,13 +117,17 @@ export default function IntelligentBPMApp() {
 
     loadData();
     return () => { isMounted = false; };
-  }, [user]);
+  }, [user, userRole]);
 
   const refreshData = async () => {
-    const { data: reqData } = await supabase
-      .from('requests')
-      .select('*')
-      .order('created_at', { ascending: false });
+    if (!user) return;
+    let query = supabase.from('requests').select('*').order('created_at', { ascending: false });
+    
+    if (userRole === 'REQUESTER') {
+      query = query.eq('created_by', user.id);
+    }
+
+    const { data: reqData } = await query;
 
     const { data: logData } = await supabase
       .from('audit_logs')
@@ -129,6 +138,37 @@ export default function IntelligentBPMApp() {
     if (reqData) setRequests(reqData as RequestItem[]);
     if (logData) setAuditLogs(logData as AuditLogItem[]);
   };
+
+  // 📊 THỐNG KÊ CHI TIÊU TRONG THÁNG (DÙNG CHO CHỨC NĂNG DASHBOARD QUẢN LÝ)
+  const monthlyStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // Lọc các request thuộc tháng & năm hiện tại
+    const currentMonthRequests = requests.filter((req) => {
+      const reqDate = new Date(req.created_at);
+      return reqDate.getMonth() === currentMonth && reqDate.getFullYear() === currentYear;
+    });
+
+    // Tính tổng tiền đã duyệt trong tháng
+    const totalApprovedAmount = currentMonthRequests
+      .filter((req) => req.status === 'APPROVED')
+      .reduce((sum, req) => sum + Number(req.amount), 0);
+
+    // Đếm số đơn bị từ chối trong tháng
+    const rejectedCount = currentMonthRequests.filter((req) => req.status === 'REJECTED').length;
+
+    // Đếm số đơn đang chờ duyệt
+    const pendingCount = currentMonthRequests.filter((req) => req.status === 'PENDING').length;
+
+    return {
+      totalApprovedAmount,
+      rejectedCount,
+      pendingCount,
+      monthYearStr: `Tháng ${currentMonth + 1}/${currentYear}`,
+    };
+  }, [requests]);
 
   // Xử lý XÁC THỰC
   const handleAuth = async (e: React.FormEvent) => {
@@ -172,7 +212,13 @@ export default function IntelligentBPMApp() {
     try {
       const { data, error } = await supabase
         .from('requests')
-        .insert([{ title, amount: parseFloat(amount), description, status: 'PENDING' }])
+        .insert([{ 
+          title, 
+          amount: parseFloat(amount), 
+          description, 
+          status: 'PENDING',
+          created_by: user?.id 
+        }])
         .select()
         .single();
 
@@ -266,7 +312,7 @@ export default function IntelligentBPMApp() {
                   onChange={(e) => setSelectedRole(e.target.value as 'REQUESTER' | 'MANAGER')}
                 >
                   <option value="REQUESTER">Nhân viên (Tạo đề xuất chi tiêu)</option>
-                  <option value="MANAGER">Quản lý (Phê duyệt & Duyệt đơn)</option>
+                  <option value="MANAGER">Quản lý (Phê duyệt & Xem Analytics)</option>
                 </select>
               </div>
             )}
@@ -296,7 +342,7 @@ export default function IntelligentBPMApp() {
   // MÀN HÌNH 2: ĐÃ ĐĂNG NHẬP
   return (
     <div className="min-h-screen bg-slate-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         
         {/* HEADER */}
         <header className="bg-white p-6 rounded-xl shadow-md border border-slate-200 flex justify-between items-center">
@@ -312,7 +358,7 @@ export default function IntelligentBPMApp() {
               <div className="text-xs font-bold text-slate-800 flex items-center gap-1 justify-end">
                 <User size={14} /> {user.email}
               </div>
-              <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase ${
+              <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase ${
                 userRole === 'MANAGER' ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
               }`}>
                 Role: {userRole}
@@ -327,6 +373,47 @@ export default function IntelligentBPMApp() {
             </button>
           </div>
         </header>
+
+        {/* 📈 CÁC THẺ DASHBOARD STATS (CHỈ HIỂN THỊ KHI USER LÀ "MANAGER") */}
+        {userRole === 'MANAGER' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
+              <div className="bg-emerald-100 p-3 rounded-lg text-emerald-700">
+                <DollarSign size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Đã Duyệt Chi ({monthlyStats.monthYearStr})</p>
+                <p className="text-xl font-extrabold text-emerald-700 mt-0.5">
+                  {monthlyStats.totalApprovedAmount.toLocaleString('vi-VN')} VNĐ
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
+              <div className="bg-rose-100 p-3 rounded-lg text-rose-700">
+                <Ban size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Đã Từ Chối ({monthlyStats.monthYearStr})</p>
+                <p className="text-xl font-extrabold text-rose-700 mt-0.5">
+                  {monthlyStats.rejectedCount} Request
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white p-5 rounded-xl shadow-md border border-slate-200 flex items-center gap-4">
+              <div className="bg-amber-100 p-3 rounded-lg text-amber-700">
+                <Clock size={24} />
+              </div>
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase">Đang Chờ Duyệt</p>
+                <p className="text-xl font-extrabold text-amber-700 mt-0.5">
+                  {monthlyStats.pendingCount} Request
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
@@ -382,8 +469,13 @@ export default function IntelligentBPMApp() {
           {/* CỘT 2 & 3: REAL-TIME DASHBOARD & AUDIT LOGS */}
           <div className="lg:col-span-2 space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <FileText className="text-indigo-600" /> Real-time Approval Dashboard
+              <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2 justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="text-indigo-600" /> Real-time Approval Dashboard
+                </span>
+                <span className="text-xs font-normal text-slate-500">
+                  {userRole === 'MANAGER' ? 'Hiển thị: Tất cả các đơn' : 'Hiển thị: Đơn cá nhân của bạn'}
+                </span>
               </h2>
 
               <div className="space-y-4">
@@ -427,6 +519,7 @@ export default function IntelligentBPMApp() {
                       </div>
                     )}
 
+                    {/* NÚT THAO TÁC XÁC NHẬN - CHỈ CÓ ROLE "MANAGER" MỚI THẤY VÀ THỰC HIỆN ĐƯỢC */}
                     {req.status === 'PENDING' && (
                       <div className="flex gap-2 justify-end pt-2">
                         {userRole === 'MANAGER' ? (
