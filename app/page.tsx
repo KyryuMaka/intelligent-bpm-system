@@ -27,8 +27,8 @@ interface AuditLogItem {
   performed_by: string | null;
   details: Record<string, unknown> | null;
   created_at: string;
-  // Bổ sung thông tin join
   requests?: { title: string; amount: number } | null;
+  profiles?: { email: string } | null;
 }
 
 const getCleanSupabaseUrl = (rawUrl?: string) => {
@@ -117,10 +117,10 @@ export default function IntelligentBPMApp() {
 
       const { data: reqData } = await query;
 
-      // Join với requests để lấy tên tiêu đề đơn trong Audit Log
+      // Join với cả requests và profiles để lấy Email chính xác của người dùng
       const { data: logData } = await supabase
         .from('audit_logs')
-        .select('*, requests(title, amount)')
+        .select('*, requests(title, amount), profiles(email)')
         .order('created_at', { ascending: false })
         .limit(30);
 
@@ -146,7 +146,7 @@ export default function IntelligentBPMApp() {
 
     const { data: logData } = await supabase
       .from('audit_logs')
-      .select('*, requests(title, amount)')
+      .select('*, requests(title, amount), profiles(email)')
       .order('created_at', { ascending: false })
       .limit(30);
 
@@ -230,12 +230,11 @@ export default function IntelligentBPMApp() {
 
       if (error) throw error;
 
-      // Ghi audit log tạo đơn kèm thông tin User
       await supabase.from('audit_logs').insert({
         request_id: data.id,
         action: 'REQUEST_CREATED',
         performed_by: user?.id,
-        details: { title: data.title, amount: data.amount, user_email: user?.email },
+        details: { title: data.title, amount: data.amount, performed_by_email: user?.email },
       });
 
       await fetch('/api/process-request', {
@@ -269,7 +268,7 @@ export default function IntelligentBPMApp() {
       request_id: id,
       action: `MANAGER_${newStatus}`,
       performed_by: user?.id,
-      details: { updated_at: new Date().toISOString(), manager_email: user?.email },
+      details: { updated_at: new Date().toISOString(), performed_by_email: user?.email },
     });
     await refreshData();
   };
@@ -755,7 +754,7 @@ export default function IntelligentBPMApp() {
           </div>
         )}
 
-        {/* 📊 TAB 3: SYSTEM AUDIT LOG DẠNG BẢNG CHUYÊN NGHIỆP */}
+        {/* 📊 TAB 3: SYSTEM AUDIT LOG HIỂN THỊ EMAIL TRỰC QUAN */}
         {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div>
@@ -771,7 +770,7 @@ export default function IntelligentBPMApp() {
                   <tr>
                     <th className="p-3.5">Thời Gian</th>
                     <th className="p-3.5">Hành Động</th>
-                    <th className="p-3.5">Người Thực Hiện</th>
+                    <th className="p-3.5">Người Thực Hiện (Email)</th>
                     <th className="p-3.5">Tên Đề Xuất</th>
                     <th className="p-3.5">Chi Tiết Thao Tác</th>
                   </tr>
@@ -784,11 +783,17 @@ export default function IntelligentBPMApp() {
                   )}
                   {auditLogs.map((log) => {
                     const actionDetails = log.details || {};
+                    
+                    // Ưu tiên 1: Email JOIN từ bảng profiles
+                    // Ưu tiên 2: Email trong details
+                    // Ưu tiên 3: Tên Hệ Thống AI Engine nếu không có User ID
                     const performedEmail = 
+                      log.profiles?.email || 
+                      (actionDetails.performed_by_email as string) || 
                       (actionDetails.user_email as string) || 
                       (actionDetails.manager_email as string) || 
-                      (log.performed_by ? `${log.performed_by.slice(0, 8)}...` : 'Hệ Thống AI Engine');
-                    
+                      (log.performed_by ? log.performed_by : 'Hệ Thống AI Engine');
+
                     const requestTitle = log.requests?.title || (actionDetails.title as string) || 'Yêu cầu hệ thống';
 
                     return (
@@ -807,7 +812,7 @@ export default function IntelligentBPMApp() {
                             {log.action}
                           </span>
                         </td>
-                        <td className="p-3.5 font-bold text-slate-800">
+                        <td className="p-3.5 font-bold text-blue-900">
                           {performedEmail}
                         </td>
                         <td className="p-3.5 font-bold text-slate-900">
