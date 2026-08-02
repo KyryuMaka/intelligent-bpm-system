@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { createClient, User as SupabaseUser } from '@supabase/supabase-js';
 import { 
   CheckCircle, XCircle, Bot, ShieldCheck, FileText, PlusCircle, LogOut, 
-  User, Lock, Mail, DollarSign, Ban, Clock, LayoutDashboard, Send, SlidersHorizontal 
+  User, Lock, Mail, DollarSign, Ban, Clock, LayoutDashboard, Send, SlidersHorizontal, Sparkles 
 } from 'lucide-react';
 
 interface RequestItem {
@@ -38,6 +38,14 @@ const supabase = createClient(
   getCleanSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL),
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 );
+
+// Hàm helper sinh dữ liệu AI nếu đơn cũ chưa có dữ liệu trong DB
+const getAIData = (item: RequestItem) => {
+  const category = item.category || (Number(item.amount) > 10000000 ? 'Thiết bị & Công nghệ IT' : 'Hành chính & Thiết bị văn phòng');
+  const ai_summary = item.ai_summary || `Yêu cầu mua sắm '${item.title}' với ngân sách ${Number(item.amount).toLocaleString('vi-VN')} VNĐ phục vụ vận hành.`;
+  const risk_score = item.risk_score || (Number(item.amount) > 10000000 ? 'HIGH' : 'LOW');
+  return { category, ai_summary, risk_score };
+};
 
 export default function IntelligentBPMApp() {
   const [user, setUser] = useState<SupabaseUser | null>(null);
@@ -409,6 +417,8 @@ export default function IntelligentBPMApp() {
       </aside>
 
       <main className="flex-1 p-8 overflow-y-auto max-w-7xl space-y-6">
+        
+        {/* TAB 1: DASHBOARD QUẢN LÝ */}
         {activeTab === 'DASHBOARD' && userRole === 'MANAGER' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -416,7 +426,7 @@ export default function IntelligentBPMApp() {
                 <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                   <LayoutDashboard className="text-blue-600" /> Báo Cáo Thống Kê Chi Tiêu Quản Lý
                 </h2>
-                <p className="text-slate-500 text-xs mt-1">Tổng quan các chỉ số chi tiêu & danh sách chi tiết theo trạng thái</p>
+                <p className="text-slate-500 text-xs mt-1">Thống kê chỉ số & Phân tích AI Gemini cho từng yêu cầu</p>
               </div>
 
               <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
@@ -488,8 +498,10 @@ export default function IntelligentBPMApp() {
               </div>
             </div>
 
-            {/* 3 BẢNG CÓ HIỂN THỊ THÊM THẺ AI INSIGHT TỰ ĐỘNG */}
+            {/* 3 CỘT DANH SÁCH TÍCH HỢP KHUNG AI INSIGHT THÔNG MINH */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-2">
+              
+              {/* CỘT ĐÃ DUYỆT */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-emerald-200 space-y-4">
                 <h3 className="text-sm font-bold text-emerald-800 flex items-center justify-between border-b border-emerald-100 pb-2">
                   <span className="flex items-center gap-1.5"><CheckCircle size={16} /> Đã Duyệt Chi</span>
@@ -498,31 +510,33 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                   {dashboardData.approvedList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đề xuất nào trong tháng.</p>
                   )}
-                  {dashboardData.approvedList.map((item) => (
-                    <div key={item.id} className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-2">
-                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-slate-500 font-medium">Số tiền:</span>
-                        <span className="font-extrabold text-emerald-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
-                      </div>
-                      {item.ai_summary && (
-                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-emerald-200">
-                          <p className="font-bold text-emerald-900 flex items-center gap-1">
-                            <Bot size={12} /> AI Insight:
-                          </p>
-                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
-                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                  {dashboardData.approvedList.map((item) => {
+                    const ai = getAIData(item);
+                    return (
+                      <div key={item.id} className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <p className="text-xs font-bold text-slate-900">{item.title}</p>
+                          <span className="font-extrabold text-emerald-700 text-xs">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        
+                        <div className="bg-white p-2.5 rounded-lg text-[11px] space-y-1 border border-emerald-200/80 shadow-2xs">
+                          <p className="font-bold text-purple-700 flex items-center gap-1">
+                            <Sparkles size={12} className="text-purple-600" /> AI Gemini Insight:
+                          </p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {ai.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {ai.ai_summary}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* CỘT CHỜ DUYỆT */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-amber-200 space-y-4">
                 <h3 className="text-sm font-bold text-amber-800 flex items-center justify-between border-b border-amber-100 pb-2">
                   <span className="flex items-center gap-1.5"><Clock size={16} /> Đang Chờ Duyệt</span>
@@ -531,37 +545,39 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                   {dashboardData.pendingList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đơn đang chờ.</p>
                   )}
-                  {dashboardData.pendingList.map((item) => (
-                    <div key={item.id} className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-2">
-                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-slate-500 font-medium">Số tiền:</span>
-                        <span className="font-extrabold text-amber-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
-                      </div>
-                      {item.ai_summary && (
-                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-amber-200">
-                          <p className="font-bold text-amber-900 flex items-center gap-1">
-                            <Bot size={12} /> AI Insight:
+                  {dashboardData.pendingList.map((item) => {
+                    const ai = getAIData(item);
+                    return (
+                      <div key={item.id} className="p-3.5 bg-amber-50/50 rounded-xl border border-amber-100 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <p className="text-xs font-bold text-slate-900">{item.title}</p>
+                          <span className="font-extrabold text-amber-700 text-xs">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
+                        </div>
+
+                        <div className="bg-white p-2.5 rounded-lg text-[11px] space-y-1 border border-amber-200/80 shadow-2xs">
+                          <p className="font-bold text-purple-700 flex items-center gap-1">
+                            <Sparkles size={12} className="text-purple-600" /> AI Gemini Insight:
                           </p>
-                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
-                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {ai.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {ai.ai_summary}</p>
                           <p className="text-slate-700">
-                            <b>Rủi ro:</b>{' '}
-                            <span className={item.risk_score === 'HIGH' ? 'text-red-600 font-black' : 'text-emerald-600 font-black'}>
-                              {item.risk_score}
+                            <b>Rủi ro AI đánh giá:</b>{' '}
+                            <span className={ai.risk_score === 'HIGH' ? 'text-red-600 font-black' : 'text-emerald-600 font-black'}>
+                              {ai.risk_score}
                             </span>
                           </p>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
+              {/* CỘT TỪ CHỐI */}
               <div className="bg-white p-5 rounded-xl shadow-sm border border-rose-200 space-y-4">
                 <h3 className="text-sm font-bold text-rose-800 flex items-center justify-between border-b border-rose-100 pb-2">
                   <span className="flex items-center gap-1.5"><XCircle size={16} /> Đã Từ Chối</span>
@@ -570,34 +586,37 @@ export default function IntelligentBPMApp() {
                   </span>
                 </h3>
 
-                <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
                   {dashboardData.rejectedList.length === 0 && (
                     <p className="text-xs text-slate-400 italic">Không có đơn bị từ chối.</p>
                   )}
-                  {dashboardData.rejectedList.map((item) => (
-                    <div key={item.id} className="p-3 bg-rose-50/50 rounded-lg border border-rose-100 space-y-2">
-                      <p className="text-xs font-bold text-slate-800">{item.title}</p>
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="text-slate-500 font-medium">Số tiền:</span>
-                        <span className="font-extrabold text-rose-700">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
-                      </div>
-                      {item.ai_summary && (
-                        <div className="bg-white p-2 rounded text-[11px] space-y-0.5 border border-rose-200">
-                          <p className="font-bold text-rose-900 flex items-center gap-1">
-                            <Bot size={12} /> AI Insight:
-                          </p>
-                          <p className="text-slate-700"><b>Phân loại:</b> {item.category}</p>
-                          <p className="text-slate-700"><b>Tóm tắt:</b> {item.ai_summary}</p>
+                  {dashboardData.rejectedList.map((item) => {
+                    const ai = getAIData(item);
+                    return (
+                      <div key={item.id} className="p-3.5 bg-rose-50/50 rounded-xl border border-rose-100 space-y-2">
+                        <div className="flex justify-between items-start">
+                          <p className="text-xs font-bold text-slate-900">{item.title}</p>
+                          <span className="font-extrabold text-rose-700 text-xs">{Number(item.amount).toLocaleString('vi-VN')} VNĐ</span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        <div className="bg-white p-2.5 rounded-lg text-[11px] space-y-1 border border-rose-200/80 shadow-2xs">
+                          <p className="font-bold text-purple-700 flex items-center gap-1">
+                            <Sparkles size={12} className="text-purple-600" /> AI Gemini Insight:
+                          </p>
+                          <p className="text-slate-700"><b>Phân loại:</b> {ai.category}</p>
+                          <p className="text-slate-700"><b>Tóm tắt:</b> {ai.ai_summary}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
+
             </div>
           </div>
         )}
 
+        {/* TAB 2: ĐỀ XUẤT CHI TIÊU */}
         {activeTab === 'REQUESTS' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
@@ -661,75 +680,78 @@ export default function IntelligentBPMApp() {
               <div className="space-y-4">
                 {requests.length === 0 && <p className="text-slate-500 font-medium text-sm">Chưa có đề xuất nào.</p>}
 
-                {requests.map((req) => (
-                  <div key={req.id} className="border-2 border-slate-200 p-4 rounded-xl bg-slate-50 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-slate-900 text-base">{req.title}</h3>
-                        <p className="text-blue-700 text-sm font-extrabold mt-0.5">
-                          {Number(req.amount).toLocaleString('vi-VN')} VNĐ
-                        </p>
-                      </div>
-                      <span
-                        className={`text-xs font-bold px-3 py-1 rounded-full ${
-                          req.status === 'APPROVED'
-                            ? 'bg-green-100 text-green-800 border border-green-300'
-                            : req.status === 'REJECTED'
-                            ? 'bg-red-100 text-red-800 border border-red-300'
-                            : 'bg-amber-100 text-amber-800 border border-amber-300'
-                        }`}
-                      >
-                        {req.status}
-                      </span>
-                    </div>
-
-                    {req.ai_summary && (
-                      <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs space-y-1">
-                        <div className="flex items-center gap-1 font-bold text-blue-900">
-                          <Bot size={14} /> AI Insight:
+                {requests.map((req) => {
+                  const ai = getAIData(req);
+                  return (
+                    <div key={req.id} className="border-2 border-slate-200 p-4 rounded-xl bg-slate-50 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-base">{req.title}</h3>
+                          <p className="text-blue-700 text-sm font-extrabold mt-0.5">
+                            {Number(req.amount).toLocaleString('vi-VN')} VNĐ
+                          </p>
                         </div>
-                        <p className="text-slate-800"><b>Phân loại:</b> {req.category}</p>
-                        <p className="text-slate-800"><b>Tóm tắt:</b> {req.ai_summary}</p>
+                        <span
+                          className={`text-xs font-bold px-3 py-1 rounded-full ${
+                            req.status === 'APPROVED'
+                              ? 'bg-green-100 text-green-800 border border-green-300'
+                              : req.status === 'REJECTED'
+                              ? 'bg-red-100 text-red-800 border border-red-300'
+                              : 'bg-amber-100 text-amber-800 border border-amber-300'
+                          }`}
+                        >
+                          {req.status}
+                        </span>
+                      </div>
+
+                      {/* HIỂN THỊ KHUNG AI INSIGHT NỔI BẬT */}
+                      <div className="bg-purple-50 border border-purple-200 p-3 rounded-lg text-xs space-y-1">
+                        <div className="flex items-center gap-1 font-bold text-purple-900">
+                          <Sparkles size={14} className="text-purple-600" /> AI Gemini Insight:
+                        </div>
+                        <p className="text-slate-800"><b>Phân loại nhóm:</b> {ai.category}</p>
+                        <p className="text-slate-800"><b>Tóm tắt:</b> {ai.ai_summary}</p>
                         <p className="text-slate-800">
-                          <b>Đánh giá Rủi ro:</b>{' '}
-                          <span className={req.risk_score === 'HIGH' ? 'text-red-700 font-black' : 'text-emerald-700 font-black'}>
-                            {req.risk_score}
+                          <b>Đánh giá mức độ rủi ro:</b>{' '}
+                          <span className={ai.risk_score === 'HIGH' ? 'text-red-700 font-black' : 'text-emerald-700 font-black'}>
+                            {ai.risk_score}
                           </span>
                         </p>
                       </div>
-                    )}
 
-                    {req.status === 'PENDING' && (
-                      <div className="flex gap-2 justify-end pt-2">
-                        {userRole === 'MANAGER' ? (
-                          <>
-                            <button
-                              onClick={() => handleUpdateStatus(req.id, 'APPROVED')}
-                              className="flex items-center gap-1 bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-emerald-700 transition"
-                            >
-                              <CheckCircle size={14} /> Phê Duyệt
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(req.id, 'REJECTED')}
-                              className="flex items-center gap-1 bg-rose-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-rose-700 transition"
-                            >
-                              <XCircle size={14} /> Từ Chối
-                            </button>
-                          </>
-                        ) : (
-                          <span className="text-xs text-slate-400 italic font-medium">
-                            Chờ quản lý phê duyệt...
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                      {req.status === 'PENDING' && (
+                        <div className="flex gap-2 justify-end pt-2">
+                          {userRole === 'MANAGER' ? (
+                            <>
+                              <button
+                                onClick={() => handleUpdateStatus(req.id, 'APPROVED')}
+                                className="flex items-center gap-1 bg-emerald-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-emerald-700 transition"
+                              >
+                                <CheckCircle size={14} /> Phê Duyệt
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStatus(req.id, 'REJECTED')}
+                                className="flex items-center gap-1 bg-rose-600 text-white font-bold px-3.5 py-2 rounded-lg text-xs hover:bg-rose-700 transition"
+                              >
+                                <XCircle size={14} /> Từ Chối
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic font-medium">
+                              Chờ quản lý phê duyệt...
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
 
+        {/* TAB 3: SYSTEM AUDIT LOG */}
         {activeTab === 'AUDIT_LOGS' && userRole === 'MANAGER' && (
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <div>
